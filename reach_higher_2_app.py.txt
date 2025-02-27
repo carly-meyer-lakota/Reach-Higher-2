@@ -1,0 +1,55 @@
+import pandas as pd
+import difflib
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+github_base_url = "https://raw.githubusercontent.com/carly-meyer-lakota/Reach-Higher-Alignment-2/main/"
+
+def load_csv(file_name):
+    url = github_base_url + file_name
+    return pd.read_csv(url)
+
+def fuzzy_match(input_text, choices, threshold=0.6):
+    matches = difflib.get_close_matches(input_text, choices, n=3, cutoff=threshold)
+    if matches:
+        return matches[0]  # Return the best match
+    return None
+
+@app.route("/search", methods=["GET"])
+def search():
+    search_type = request.args.get("type")  # "topic" or "learning_skill"
+    query = request.args.get("query")
+    
+    if not search_type or not query:
+        return jsonify({"error": "Missing required parameters: 'type' and 'query'"}), 400
+    
+    if search_type == "topic":
+        df = load_csv("vocabulary.csv")
+        topic_column = "Topic"
+        unit_column = "Unit"
+        vocab_column = "Key Vocabulary"
+        
+        match = fuzzy_match(query, df[topic_column].dropna().unique())
+        if match:
+            matched_row = df[df[topic_column] == match].iloc[0]
+            return jsonify({
+                "Matched Unit": matched_row[unit_column],
+                "Key Vocabulary": matched_row[vocab_column].split(",")
+            })
+        
+    elif search_type == "learning_skill":
+        df = load_csv("reach_higher_curriculum.csv")
+        skill_column = "Learning Skill"
+        
+        match = fuzzy_match(query, df[skill_column].dropna().unique())
+        if match:
+            matched_row = df[df[skill_column] == match].iloc[0]
+            return jsonify({
+                "Matched Skill": matched_row[skill_column]
+            })
+    
+    return jsonify({"message": "No good match found"}), 404
+
+if __name__ == "__main__":
+    app.run(debug=True)
